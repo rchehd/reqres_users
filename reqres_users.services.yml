@@ -1,0 +1,14 @@
+services:
+  logger.channel.reqres_users:
+    parent: logger.channel_base
+    arguments: ['reqres_users']
+
+  reqres_users.api_client:
+    class: Drupal\reqres_users\Api\ReqresApiClient
+    arguments:
+      - '@http_client'
+      - '@logger.channel.reqres_users'
+      - '@event_dispatcher'
+      - '@cache.default'
+      - '@state'
+      - '@cache_tags.invalidator'

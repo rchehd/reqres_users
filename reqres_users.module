@@ -1,0 +1,21 @@
+<?php
+
+/**
+ * @file
+ *
+ * Contains the main module file for the Reqres Users module.
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function reqres_users_theme(): array {
+  return [
+    'reqres_user_list' => [
+      'variables' => [
+        'users_table' => NULL,
+        'users_pager' => NULL,
+      ],
+    ],
+  ];
+}

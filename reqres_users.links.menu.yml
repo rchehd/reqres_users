@@ -1,0 +1,6 @@
+reqres_users.settings:
+  title: 'Reqres Users'
+  description: 'Configure the Reqres API key and connection settings.'
+  route_name: reqres_users.settings
+  parent: system.admin_config_services
+  weight: 10

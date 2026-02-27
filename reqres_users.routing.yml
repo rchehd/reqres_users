@@ -1,0 +1,17 @@
+reqres_users.ajax_pager:
+  path: '/reqres-users/ajax'
+  defaults:
+    _controller: '\Drupal\reqres_users\Controller\ReqresUsersAjaxController::page'
+    _title: ''
+  requirements:
+    _access: 'TRUE'
+  options:
+    no_cache: TRUE
+
+reqres_users.settings:
+  path: '/admin/config/services/reqres-users'
+  defaults:
+    _form: '\Drupal\reqres_users\Form\ReqresUsersSettingsForm'
+    _title: 'Reqres Users Settings'
+  requirements:
+    _permission: 'administer site configuration'

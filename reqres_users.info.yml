@@ -1,0 +1,7 @@
+name: 'Reqres Users'
+type: module
+description: 'Provides a block listing users from the Reqres dummy API.'
+core_version_requirement: ^10 || ^11
+package: Custom
+dependencies:
+  - drupal:block

@@ -1,0 +1,19 @@
+{#
+/**
+ * @file
+ * Default theme implementation for the Reqres users block.
+ *
+ * Available variables:
+ * - users_table: A render array for the table of users.
+ * - users_pager: A render array for the pagination.
+ */
+#}
+<div class="reqres-users-wrapper container">
+  <div class="table-responsive">
+    {{ users_table }}
+  </div>
+
+  <div class="reqres-pager">
+    {{ users_pager }}
+  </div>
+</div>

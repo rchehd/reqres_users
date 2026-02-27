@@ -24,22 +24,63 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
  */
 final class ReqresApiClientTest extends TestCase {
 
+  /**
+   * The HTTP client mock.
+   *
+   * @var \GuzzleHttp\ClientInterface
+   */
   private ClientInterface&MockObject $httpClient;
 
+  /**
+   * The logger mock.
+   *
+   * @var \Psr\Log\LoggerInterface
+   */
   private LoggerInterface&MockObject $logger;
 
+  /**
+   * The event dispatcher mock.
+   *
+   * @var \Symfony\Contracts\EventDispatcher\EventDispatcherInterface
+   */
   private EventDispatcherInterface&MockObject $eventDispatcher;
 
+  /**
+   * The cache backend mock.
+   *
+   * @var \Drupal\Core\Cache\CacheBackendInterface
+   */
   private CacheBackendInterface&MockObject $cache;
 
+  /**
+   * The state mock.
+   *
+   * @var \Drupal\Core\State\StateInterface
+   */
   private StateInterface&MockObject $state;
 
+  /**
+   * The cache tags invalidator mock.
+   *
+   * @var \Drupal\Core\Cache\CacheTagsInvalidatorInterface
+   */
   private CacheTagsInvalidatorInterface&MockObject $cacheTagsInvalidator;
 
+  /**
+   * The API client under test.
+   *
+   * @var \Drupal\reqres_users\Api\ReqresApiClient
+   */
   private ReqresApiClient $apiClient;
 
+  /**
+   * A fixed API key used across tests.
+   */
   private const string TEST_API_KEY = 'test-api-key-12345';
 
+  /**
+   * {@inheritdoc}
+   */
   protected function setUp(): void {
     $this->httpClient = $this->createMock(ClientInterface::class);
     $this->logger = $this->createMock(LoggerInterface::class);
@@ -62,10 +103,9 @@ final class ReqresApiClientTest extends TestCase {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // Cache hit
-  // -------------------------------------------------------------------------
-
+  /**
+   * Tests that a cached result is returned without calling the API.
+   */
   public function testGetUsersReturnsCachedResultWithoutCallingApi(): void {
     $cachedData = ['users' => [], 'total' => 12];
     $cacheItem = $this->makeCacheItem($cachedData);
@@ -74,7 +114,6 @@ final class ReqresApiClientTest extends TestCase {
       ->with('reqres_users:response:1:6')
       ->willReturn($cacheItem);
 
-    // HTTP client must NOT be called when cache is warm.
     $this->httpClient->expects($this->never())->method('request');
 
     $result = $this->apiClient->getUsers(1, 6, cache_ttl: 300);
@@ -82,10 +121,9 @@ final class ReqresApiClientTest extends TestCase {
     $this->assertSame($cachedData, $result);
   }
 
-  // -------------------------------------------------------------------------
-  // Cache miss — happy path
-  // -------------------------------------------------------------------------
-
+  /**
+   * Tests that a cache miss results in an API call and correct DTO mapping.
+   */
   public function testGetUsersMapsResponseToDtos(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
@@ -112,6 +150,9 @@ final class ReqresApiClientTest extends TestCase {
     $this->assertSame('Bluth', $first->lastName);
   }
 
+  /**
+   * Tests that the correct page and per_page query params are forwarded.
+   */
   public function testGetUsersForwardsCorrectPageAndPerPageToApi(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
@@ -129,13 +170,15 @@ final class ReqresApiClientTest extends TestCase {
     $this->apiClient->getUsers(3, 10, cache_ttl: 300);
   }
 
+  /**
+   * Tests that the API response is written to cache when TTL is positive.
+   */
   public function testGetUsersCachesResultWhenTtlIsPositive(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
     $this->httpClient->method('request')
       ->willReturn(new Response(200, [], $this->fixtureJson()));
 
-    // Both the response and the hash are persisted; verify the response entry.
     $responseCached = FALSE;
     $this->cache
       ->expects($this->atLeastOnce())
@@ -156,8 +199,10 @@ final class ReqresApiClientTest extends TestCase {
     $this->assertTrue($responseCached, 'API response was not written to cache.');
   }
 
+  /**
+   * Tests that cache is completely skipped when TTL is zero.
+   */
   public function testGetUsersSkipsCacheWhenTtlIsZero(): void {
-    // Neither cache::get nor cache::set should be called when TTL = 0.
     $this->cache->expects($this->never())->method('get');
     $this->cache->expects($this->never())->method('set');
     $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
@@ -167,14 +212,12 @@ final class ReqresApiClientTest extends TestCase {
     $this->apiClient->getUsers(1, 2, cache_ttl: 0);
   }
 
-  // -------------------------------------------------------------------------
-  // Hash-based cache invalidation
-  // -------------------------------------------------------------------------
-
+  /**
+   * Tests that the cache tag is invalidated when the data hash changes.
+   */
   public function testGetUsersInvalidatesCacheTagWhenDataHashChanges(): void {
     $this->cache->method('get')
       ->willReturnCallback(function (string $key): object|false {
-        // Simulate: API response cache miss, but old hash exists.
         if (str_starts_with($key, 'reqres_users:response:')) {
           return FALSE;
         }
@@ -197,10 +240,11 @@ final class ReqresApiClientTest extends TestCase {
   }
 
   /**
+   * Tests that the cache tag is NOT invalidated when the data is unchanged.
+   *
    * @throws \JsonException
    */
   public function testGetUsersDoesNotInvalidateCacheTagWhenDataIsUnchanged(): void {
-    // Pre-compute the hash for the fixture so they match.
     $fixtureItems = json_decode(
       $this->fixtureJson(),
       TRUE,
@@ -230,10 +274,9 @@ final class ReqresApiClientTest extends TestCase {
     $this->apiClient->getUsers(1, 2, cache_ttl: 300);
   }
 
-  // -------------------------------------------------------------------------
-  // Error handling
-  // -------------------------------------------------------------------------
-
+  /**
+   * Tests that a Guzzle exception results in an empty array being returned.
+   */
   public function testGetUsersReturnsEmptyArrayOnGuzzleException(): void {
     $this->cache->method('get')->willReturn(FALSE);
 
@@ -251,6 +294,9 @@ final class ReqresApiClientTest extends TestCase {
     $this->assertSame(0, $result['total_pages']);
   }
 
+  /**
+   * Tests that a malformed API response results in an empty array being returned.
+   */
   public function testGetUsersReturnsEmptyArrayOnMalformedResponse(): void {
     $this->cache->method('get')->willReturn(FALSE);
 
@@ -267,10 +313,9 @@ final class ReqresApiClientTest extends TestCase {
     $this->assertSame(0, $result['total_pages']);
   }
 
-  // -------------------------------------------------------------------------
-  // Event / extension point
-  // -------------------------------------------------------------------------
-
+  /**
+   * Tests that an event subscriber can filter the returned user list.
+   */
   public function testGetUsersAppliesEventFilter(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->httpClient->method('request')
@@ -287,10 +332,12 @@ final class ReqresApiClientTest extends TestCase {
     $result = $this->apiClient->getUsers(1, 2, cache_ttl: 300);
 
     $this->assertSame([], $result['users']);
-    // Total is still the API-reported value, unaffected by filtering.
     $this->assertSame(12, $result['total']);
   }
 
+  /**
+   * Tests that the API key is sent as an x-api-key request header.
+   */
   public function testGetUsersSendsApiKeyHeader(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
@@ -307,6 +354,9 @@ final class ReqresApiClientTest extends TestCase {
     $this->apiClient->getUsers(1, 2, cache_ttl: 0);
   }
 
+  /**
+   * Tests that the correct event name is used when dispatching the filter event.
+   */
   public function testGetUsersDispatchesCorrectEventName(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->httpClient->method('request')
@@ -324,16 +374,29 @@ final class ReqresApiClientTest extends TestCase {
     $this->apiClient->getUsers(1, 2, cache_ttl: 300);
   }
 
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
-
+  /**
+   * Creates a minimal cache item object with the given data payload.
+   *
+   * @param mixed $data
+   *   The data to store in the cache item.
+   *
+   * @return object
+   *   A stdClass with a 'data' property.
+   */
   private function makeCacheItem(mixed $data): object {
     $item = new \stdClass();
     $item->data = $data;
     return $item;
   }
 
+  /**
+   * Returns a JSON string matching the Reqres API response fixture.
+   *
+   * @return string
+   *   A JSON-encoded fixture.
+   *
+   * @throws \JsonException
+   */
   private function fixtureJson(): string {
     return (string) json_encode([
       'page' => 1,

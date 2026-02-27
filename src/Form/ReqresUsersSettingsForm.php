@@ -38,11 +38,7 @@ class ReqresUsersSettingsForm extends FormBase {
     $form['api_key'] = [
       '#type' => 'textfield',
       '#title' => $this->t('API key'),
-      '#description' => $this->t(
-        'The <code>x-api-key</code> header value sent with every Reqres API request. '
-        . 'This value is stored in the database only and is <strong>never exported</strong> '
-        . 'to <code>config/sync</code>, so it will not appear in version control.',
-      ),
+      '#description' => $this->t('The <code>x-api-key</code> header value sent with every Reqres API request. This value is stored in the database only and is <strong>never exported</strong> to <code>config/sync</code>, so it will not appear in version control.'),
       '#default_value' => (string) $this->state->get(ReqresApiClient::STATE_KEY, ''),
       '#required' => TRUE,
       '#maxlength' => 255,

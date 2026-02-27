@@ -22,6 +22,14 @@ class ReqresUsersAjaxController extends ControllerBase {
 
   use ReqresPagerTrait;
 
+  /**
+   * Constructor.
+   *
+   * @param \Drupal\reqres_users\Api\ReqresApiClientInterface $apiClient
+   *   The API client for fetching users.
+   * @param \Drupal\Core\Render\RendererInterface $renderer
+   *   The renderer for rendering the AJAX response.
+   */
   public function __construct(
     private readonly ReqresApiClientInterface $apiClient,
     private readonly RendererInterface $renderer,
@@ -39,10 +47,6 @@ class ReqresUsersAjaxController extends ControllerBase {
 
   /**
    * Returns an AjaxResponse replacing the block wrapper with a new page.
-   *
-   * All parameters arrive as query strings so the response can be rendered
-   * without access to the original block entity. Labels are sanitised with
-   * Xss::filter(); wrapper_id is cleaned to a valid CSS identifier.
    */
   public function page(Request $request): AjaxResponse {
     $page = max(0, (int) $request->query->get('page', 0));
@@ -51,8 +55,7 @@ class ReqresUsersAjaxController extends ControllerBase {
     $email_label = Xss::filter((string) $request->query->get('email_label', 'Email'));
     $forename_label = Xss::filter((string) $request->query->get('forename_label', 'Forename'));
     $surname_label = Xss::filter((string) $request->query->get('surname_label', 'Surname'));
-    // Sanitise to a valid CSS identifier so it is safe in both the HTML id
-    // attribute and the jQuery selector inside ReplaceCommand.
+
     $wrapper_id = Html::cleanCssIdentifier(
       Xss::filter((string) $request->query->get('wrapper_id', '')),
     );

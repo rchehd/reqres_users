@@ -3,11 +3,10 @@
   <description>Coding standards for the Reqres Users module.</description>
 
   <file>src</file>
-  <file>tests</file>
 
   <arg name="extensions" value="php,module,inc,install"/>
   <arg name="colors"/>
-  <arg value="sp"/>
+  <arg value="s"/>
 
   <rule ref="Drupal"/>
   <rule ref="DrupalPractice"/>

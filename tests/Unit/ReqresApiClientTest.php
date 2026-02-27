@@ -62,10 +62,7 @@ final class ReqresApiClientTest extends TestCase {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // Cache hit
-  // -------------------------------------------------------------------------
-
+  // Cache hit.
   public function testGetUsersReturnsCachedResultWithoutCallingApi(): void {
     $cachedData = ['users' => [], 'total' => 12];
     $cacheItem = $this->makeCacheItem($cachedData);
@@ -74,7 +71,6 @@ final class ReqresApiClientTest extends TestCase {
       ->with('reqres_users:response:1:6')
       ->willReturn($cacheItem);
 
-    // HTTP client must NOT be called when cache is warm.
     $this->httpClient->expects($this->never())->method('request');
 
     $result = $this->apiClient->getUsers(1, 6, cache_ttl: 300);
@@ -82,10 +78,7 @@ final class ReqresApiClientTest extends TestCase {
     $this->assertSame($cachedData, $result);
   }
 
-  // -------------------------------------------------------------------------
-  // Cache miss — happy path
-  // -------------------------------------------------------------------------
-
+  // Cache miss — happy path.
   public function testGetUsersMapsResponseToDtos(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
@@ -135,7 +128,6 @@ final class ReqresApiClientTest extends TestCase {
     $this->httpClient->method('request')
       ->willReturn(new Response(200, [], $this->fixtureJson()));
 
-    // Both the response and the hash are persisted; verify the response entry.
     $responseCached = FALSE;
     $this->cache
       ->expects($this->atLeastOnce())
@@ -157,7 +149,6 @@ final class ReqresApiClientTest extends TestCase {
   }
 
   public function testGetUsersSkipsCacheWhenTtlIsZero(): void {
-    // Neither cache::get nor cache::set should be called when TTL = 0.
     $this->cache->expects($this->never())->method('get');
     $this->cache->expects($this->never())->method('set');
     $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
@@ -167,14 +158,10 @@ final class ReqresApiClientTest extends TestCase {
     $this->apiClient->getUsers(1, 2, cache_ttl: 0);
   }
 
-  // -------------------------------------------------------------------------
-  // Hash-based cache invalidation
-  // -------------------------------------------------------------------------
-
+  // Hash-based cache invalidation.
   public function testGetUsersInvalidatesCacheTagWhenDataHashChanges(): void {
     $this->cache->method('get')
       ->willReturnCallback(function (string $key): object|false {
-        // Simulate: API response cache miss, but old hash exists.
         if (str_starts_with($key, 'reqres_users:response:')) {
           return FALSE;
         }
@@ -200,7 +187,6 @@ final class ReqresApiClientTest extends TestCase {
    * @throws \JsonException
    */
   public function testGetUsersDoesNotInvalidateCacheTagWhenDataIsUnchanged(): void {
-    // Pre-compute the hash for the fixture so they match.
     $fixtureItems = json_decode(
       $this->fixtureJson(),
       TRUE,
@@ -267,10 +253,7 @@ final class ReqresApiClientTest extends TestCase {
     $this->assertSame(0, $result['total_pages']);
   }
 
-  // -------------------------------------------------------------------------
-  // Event / extension point
-  // -------------------------------------------------------------------------
-
+  // Event / extension point.
   public function testGetUsersAppliesEventFilter(): void {
     $this->cache->method('get')->willReturn(FALSE);
     $this->httpClient->method('request')
@@ -287,7 +270,6 @@ final class ReqresApiClientTest extends TestCase {
     $result = $this->apiClient->getUsers(1, 2, cache_ttl: 300);
 
     $this->assertSame([], $result['users']);
-    // Total is still the API-reported value, unaffected by filtering.
     $this->assertSame(12, $result['total']);
   }
 
@@ -324,10 +306,7 @@ final class ReqresApiClientTest extends TestCase {
     $this->apiClient->getUsers(1, 2, cache_ttl: 300);
   }
 
-  // -------------------------------------------------------------------------
-  // Helpers
-  // -------------------------------------------------------------------------
-
+  // Helpers.
   private function makeCacheItem(mixed $data): object {
     $item = new \stdClass();
     $item->data = $data;

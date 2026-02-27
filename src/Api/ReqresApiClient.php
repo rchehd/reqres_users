@@ -46,9 +46,6 @@ class ReqresApiClient implements ReqresApiClientInterface {
 
   /**
    * Cache key prefix for per-page data hashes.
-   *
-   * Stored without the cache tag so they survive tag-based invalidation and
-   * can still detect future data changes.
    */
   private const string HASH_PREFIX = 'reqres_users:data_hash:';
 
@@ -138,13 +135,6 @@ class ReqresApiClient implements ReqresApiClientInterface {
 
   /**
    * Compares the new API payload hash with the stored one.
-   *
-   * If the data has changed, invalidates the 'reqres_users' cache tag so that
-   * all block renders depending on it are immediately busted. The hash entry
-   * is stored permanently without the cache tag so it survives tag-based
-   * invalidation and can detect the next change.
-   *
-   * Only called when cache_ttl > 0 (i.e. caching is enabled).
    *
    * @param int $page
    *   Current API page.

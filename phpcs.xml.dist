@@ -6,7 +6,7 @@
 
   <arg name="extensions" value="php,module,inc,install"/>
   <arg name="colors"/>
-  <arg value="sp"/>
+  <arg value="s"/>
 
   <rule ref="Drupal"/>
   <rule ref="DrupalPractice"/>

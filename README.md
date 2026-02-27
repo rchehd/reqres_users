@@ -25,6 +25,13 @@ Drupal 10/11 module that fetches users from the [Reqres](https://reqres.in) dumm
 ### Via Composer (recommended)
 
 ```bash
-composer require drupal/reqres_users
+composer require rchehd/reqres_users
 drush en reqres_users
 ```
+
+### Setup Reqres API key
+
+1. Visit [reqres.in](https://reqres.in) and create an account.
+2. Then, visit your profile page and copy the API key.
+3. Paste it here - /admin/config/services/reqres-users
+4. Clear the cache if you have changed the API key.

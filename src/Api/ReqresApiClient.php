@@ -15,7 +15,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
- * Implementation of the ReqresApiClientInterface for interacting with the Reqres API.
+ * Provides Reqres API interaction, caching, and event dispatching.
  */
 class ReqresApiClient implements ReqresApiClientInterface {
 
@@ -98,7 +98,7 @@ class ReqresApiClient implements ReqresApiClientInterface {
       );
 
       $event = new FilterReqresUsersEvent($users);
-      /** @var FilterReqresUsersEvent $event */
+      /** @var \Drupal\reqres_users\Event\FilterReqresUsersEvent $event */
       $event = $this->eventDispatcher->dispatch($event, FilterReqresUsersEvent::EVENT_NAME);
 
       $result = [

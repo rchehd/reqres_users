@@ -32,6 +32,7 @@ class UserDto {
    * Constructs a UserDto from a raw API response item.
    *
    * @param array{id: int|string, email: string, first_name: string, last_name: string} $data
+   *   A single item from the Reqres API 'data' array.
    */
   public static function fromApiData(array $data): self {
     return new self(

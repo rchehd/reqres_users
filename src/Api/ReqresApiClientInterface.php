@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\reqres_users\Api;
 
-use Drupal\reqres_users\Dto\UserDto;
-
 /**
  * Interface for interacting with the Reqres API.
  */
@@ -21,7 +19,7 @@ interface ReqresApiClientInterface {
    * @param int $cache_ttl
    *   Seconds to cache the API response. 0 disables caching.
    *
-   * @return array{users: UserDto[], total: int}
+   * @return array{users: \Drupal\reqres_users\Dto\UserDto[], total: int}
    *   An associative array with:
    *   - users: the (possibly filtered) list of UserDto objects.
    *   - total: the unfiltered total number of users reported by the API.

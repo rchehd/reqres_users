@@ -25,9 +25,9 @@ class ReqresUsersAjaxController extends ControllerBase {
   /**
    * Constructor.
    *
-   * @param ReqresApiClientInterface $apiClient
+   * @param \Drupal\reqres_users\Api\ReqresApiClientInterface $apiClient
    *   The API client for fetching users.
-   * @param RendererInterface $renderer
+   * @param \Drupal\Core\Render\RendererInterface $renderer
    *   The renderer for rendering the AJAX response.
    */
   public function __construct(

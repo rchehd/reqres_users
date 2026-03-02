@@ -1,0 +1,9 @@
+parameters:
+    level: 6
+    paths:
+        - src
+        - tests
+    phpVersion: 80300
+    ignoreErrors:
+        - '#Unsafe usage of new static\(\)#'
+        - '#no value type specified in iterable type array#'

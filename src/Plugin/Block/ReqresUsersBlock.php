@@ -12,7 +12,8 @@ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\reqres_users\Api\ReqresApiClient;
-use Drupal\reqres_users\Api\ReqresApiClientInterface;
+use Drupal\reqres_users\Contract\UserProviderInterface;
+use Drupal\reqres_users\Exception\ApiException;
 use Drupal\reqres_users\ReqresPagerTrait;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -36,7 +37,7 @@ class ReqresUsersBlock extends BlockBase implements ContainerFactoryPluginInterf
     array $configuration,
     string $pluginId,
     mixed $pluginDefinition,
-    private readonly ReqresApiClientInterface $apiClient,
+    private readonly UserProviderInterface $userProvider,
   ) {
     parent::__construct($configuration, $pluginId, $pluginDefinition);
   }
@@ -140,11 +141,16 @@ class ReqresUsersBlock extends BlockBase implements ContainerFactoryPluginInterf
 
     $wrapper_id = 'reqres-users-block-' . ($config['instance_id'] ?: 'unsaved');
 
-    $result = $this->apiClient->getUsers(1, $per_page, $cache_ttl);
+    try {
+      $result = $this->userProvider->getUsers(1, $per_page, $cache_ttl);
+    }
+    catch (ApiException $e) {
+      return ['#markup' => $this->t('User data is temporarily unavailable.')];
+    }
 
     $rows = array_map(
       static fn($user) => [$user->email, $user->firstName, $user->lastName],
-      $result['users'],
+      $result->getUsers(),
     );
 
     $base_params = [
@@ -168,7 +174,7 @@ class ReqresUsersBlock extends BlockBase implements ContainerFactoryPluginInterf
         '#rows' => $rows,
         '#empty' => $this->t('No users found.'),
       ],
-      '#users_pager' => $this->buildPager(0, $result['total_pages'], $wrapper_id, $base_params),
+      '#users_pager' => $this->buildPager(0, $result->getTotalPages(), $wrapper_id, $base_params),
       '#prefix' => '<div id="' . $wrapper_id . '">',
       '#suffix' => '</div>',
       '#attached' => [

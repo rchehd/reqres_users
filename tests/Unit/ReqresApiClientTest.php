@@ -7,9 +7,13 @@ namespace Drupal\Tests\reqres_users\Unit;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Cache\CacheTagsInvalidatorInterface;
 use Drupal\Core\State\StateInterface;
+use Drupal\reqres_users\Api\ApiResult;
+use Drupal\reqres_users\Api\CircuitBreaker;
 use Drupal\reqres_users\Api\ReqresApiClient;
 use Drupal\reqres_users\Dto\UserDto;
 use Drupal\reqres_users\Event\FilterReqresUsersEvent;
+use Drupal\reqres_users\Exception\ApiMalformedResponseException;
+use Drupal\reqres_users\Exception\ApiNetworkException;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\TransferException;
 use GuzzleHttp\Psr7\Response;
@@ -27,44 +31,51 @@ final class ReqresApiClientTest extends TestCase {
   /**
    * The HTTP client mock.
    *
-   * @var \GuzzleHttp\ClientInterface
+   * @var \GuzzleHttp\ClientInterface&\PHPUnit\Framework\MockObject\MockObject
    */
   private ClientInterface&MockObject $httpClient;
 
   /**
    * The logger mock.
    *
-   * @var \Psr\Log\LoggerInterface
+   * @var \Psr\Log\LoggerInterface&\PHPUnit\Framework\MockObject\MockObject
    */
   private LoggerInterface&MockObject $logger;
 
   /**
    * The event dispatcher mock.
    *
-   * @var \Symfony\Contracts\EventDispatcher\EventDispatcherInterface
+   * @var \Symfony\Contracts\EventDispatcher\EventDispatcherInterface&\PHPUnit\Framework\MockObject\MockObject
    */
   private EventDispatcherInterface&MockObject $eventDispatcher;
 
   /**
    * The cache backend mock.
    *
-   * @var \Drupal\Core\Cache\CacheBackendInterface
+   * @var \Drupal\Core\Cache\CacheBackendInterface&\PHPUnit\Framework\MockObject\MockObject
    */
   private CacheBackendInterface&MockObject $cache;
 
   /**
    * The state mock.
    *
-   * @var \Drupal\Core\State\StateInterface
+   * @var \Drupal\Core\State\StateInterface&\PHPUnit\Framework\MockObject\MockObject
    */
   private StateInterface&MockObject $state;
 
   /**
    * The cache tags invalidator mock.
    *
-   * @var \Drupal\Core\Cache\CacheTagsInvalidatorInterface
+   * @var \Drupal\Core\Cache\CacheTagsInvalidatorInterface&\PHPUnit\Framework\MockObject\MockObject
    */
   private CacheTagsInvalidatorInterface&MockObject $cacheTagsInvalidator;
+
+  /**
+   * The circuit breaker mock.
+   *
+   * @var \Drupal\reqres_users\Api\CircuitBreaker&\PHPUnit\Framework\MockObject\MockObject
+   */
+  private CircuitBreaker&MockObject $circuitBreaker;
 
   /**
    * The API client under test.
@@ -93,6 +104,8 @@ final class ReqresApiClientTest extends TestCase {
       ->with(ReqresApiClient::STATE_KEY, '')
       ->willReturn(self::TEST_API_KEY);
 
+    $this->circuitBreaker = $this->createMock(CircuitBreaker::class);
+
     $this->apiClient = new ReqresApiClient(
       $this->httpClient,
       $this->logger,
@@ -100,6 +113,7 @@ final class ReqresApiClientTest extends TestCase {
       $this->cache,
       $this->state,
       $this->cacheTagsInvalidator,
+      $this->circuitBreaker,
     );
   }
 
@@ -107,8 +121,8 @@ final class ReqresApiClientTest extends TestCase {
    * Tests that a cached result is returned without calling the API.
    */
   public function testGetUsersReturnsCachedResultWithoutCallingApi(): void {
-    $cachedData = ['users' => [], 'total' => 12];
-    $cacheItem = $this->makeCacheItem($cachedData);
+    $cachedResult = new ApiResult([], 12, 2);
+    $cacheItem = $this->makeCacheItem($cachedResult);
 
     $this->cache->method('get')
       ->with('reqres_users:response:1:6')
@@ -118,7 +132,8 @@ final class ReqresApiClientTest extends TestCase {
 
     $result = $this->apiClient->getUsers(1, 6, cache_ttl: 300);
 
-    $this->assertSame($cachedData, $result);
+    $this->assertSame([], $result->getUsers());
+    $this->assertSame(12, $result->getTotal());
   }
 
   /**
@@ -138,11 +153,11 @@ final class ReqresApiClientTest extends TestCase {
 
     $result = $this->apiClient->getUsers(1, 2, cache_ttl: 300);
 
-    $this->assertCount(2, $result['users']);
-    $this->assertSame(12, $result['total']);
-    $this->assertSame(6, $result['total_pages']);
+    $this->assertCount(2, $result->getUsers());
+    $this->assertSame(12, $result->getTotal());
+    $this->assertSame(6, $result->getTotalPages());
 
-    $first = $result['users'][0];
+    $first = $result->getUsers()[0];
     $this->assertInstanceOf(UserDto::class, $first);
     $this->assertSame(1, $first->id);
     $this->assertSame('george.bluth@reqres.in', $first->email);
@@ -187,7 +202,7 @@ final class ReqresApiClientTest extends TestCase {
         function (string $key, mixed $data, int $expire, array $tags) use (&$responseCached): void {
           if ($key === 'reqres_users:response:1:2') {
             $responseCached = TRUE;
-            $this->assertIsArray($data);
+            $this->assertInstanceOf(ApiResult::class, $data);
             $this->assertGreaterThan(0, $expire);
             $this->assertSame([ReqresApiClient::CACHE_TAG], $tags);
           }
@@ -275,42 +290,105 @@ final class ReqresApiClientTest extends TestCase {
   }
 
   /**
-   * Tests that a Guzzle exception results in an empty array being returned.
+   * Tests that the circuit breaker blocks the request and throws.
    */
-  public function testGetUsersReturnsEmptyArrayOnGuzzleException(): void {
+  public function testGetUsersThrowsNetworkExceptionWhenCircuitIsOpen(): void {
+    $this->cache->method('get')->willReturn(FALSE);
+    $this->circuitBreaker->method('isOpen')->willReturn(TRUE);
+    $this->httpClient->expects($this->never())->method('request');
+
+    $this->expectException(ApiNetworkException::class);
+
+    $this->apiClient->getUsers(1, 6, cache_ttl: 300);
+  }
+
+  /**
+   * Tests that ApiNetworkException is thrown after all retry attempts fail.
+   */
+  public function testGetUsersThrowsNetworkExceptionAfterAllRetriesFail(): void {
+    $this->cache->method('get')->willReturn(FALSE);
+
+    $this->httpClient
+      ->expects($this->exactly(3))
+      ->method('request')
+      ->willThrowException(new TransferException('Connection refused'));
+
+    $this->circuitBreaker
+      ->expects($this->once())
+      ->method('recordFailure');
+
+    $this->expectException(ApiNetworkException::class);
+
+    $this->apiClient->getUsers(1, 6, cache_ttl: 300);
+  }
+
+  /**
+   * Tests that ApiMalformedResponseException is thrown on invalid JSON.
+   */
+  public function testGetUsersThrowsMalformedResponseExceptionOnBadJson(): void {
     $this->cache->method('get')->willReturn(FALSE);
 
     $this->httpClient
       ->expects($this->once())
       ->method('request')
-      ->willThrowException(new TransferException('Connection refused'));
+      ->willReturn(new Response(200, [], 'not valid json {'));
 
-    $this->logger->expects($this->once())->method('error');
+    $this->circuitBreaker
+      ->expects($this->once())
+      ->method('recordFailure');
 
-    $result = $this->apiClient->getUsers(1, 6, cache_ttl: 300);
+    $this->expectException(ApiMalformedResponseException::class);
 
-    $this->assertSame([], $result['users']);
-    $this->assertSame(0, $result['total']);
-    $this->assertSame(0, $result['total_pages']);
+    $this->apiClient->getUsers(1, 6, cache_ttl: 300);
   }
 
   /**
-   * Tests that a malformed API response results in an empty array being returned.
+   * Tests that ApiMalformedResponseException is thrown on unexpected structure.
    */
-  public function testGetUsersReturnsEmptyArrayOnMalformedResponse(): void {
+  public function testGetUsersThrowsMalformedResponseExceptionOnUnexpectedStructure(): void {
     $this->cache->method('get')->willReturn(FALSE);
 
     $this->httpClient
       ->method('request')
       ->willReturn(new Response(200, [], '{"unexpected": true}'));
 
-    $this->logger->expects($this->once())->method('error');
+    $this->circuitBreaker
+      ->expects($this->once())
+      ->method('recordFailure');
 
-    $result = $this->apiClient->getUsers(1, 6, cache_ttl: 300);
+    $this->expectException(ApiMalformedResponseException::class);
 
-    $this->assertSame([], $result['users']);
-    $this->assertSame(0, $result['total']);
-    $this->assertSame(0, $result['total_pages']);
+    $this->apiClient->getUsers(1, 6, cache_ttl: 300);
+  }
+
+  /**
+   * Tests that the client retries on transient errors and succeeds on the third attempt.
+   */
+  public function testGetUsersRetriesOnTransientNetworkError(): void {
+    $this->cache->method('get')->willReturn(FALSE);
+    $this->eventDispatcher->method('dispatch')->willReturnArgument(0);
+
+    $callCount = 0;
+    $fixture = $this->fixtureJson();
+    $this->httpClient
+      ->expects($this->exactly(3))
+      ->method('request')
+      ->willReturnCallback(
+        static function () use (&$callCount, $fixture): Response {
+          $callCount++;
+          if ($callCount < 3) {
+            throw new TransferException('Timeout');
+          }
+          return new Response(200, [], $fixture);
+        },
+      );
+
+    $this->circuitBreaker->expects($this->once())->method('recordSuccess');
+    $this->circuitBreaker->expects($this->never())->method('recordFailure');
+
+    $result = $this->apiClient->getUsers(1, 2, cache_ttl: 0);
+
+    $this->assertCount(2, $result->getUsers());
   }
 
   /**
@@ -331,8 +409,8 @@ final class ReqresApiClientTest extends TestCase {
 
     $result = $this->apiClient->getUsers(1, 2, cache_ttl: 300);
 
-    $this->assertSame([], $result['users']);
-    $this->assertSame(12, $result['total']);
+    $this->assertSame([], $result->getUsers());
+    $this->assertSame(12, $result->getTotal());
   }
 
   /**

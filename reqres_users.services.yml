@@ -3,6 +3,11 @@ services:
     parent: logger.channel_base
     arguments: ['reqres_users']
 
+  reqres_users.circuit_breaker:
+    class: Drupal\reqres_users\Api\CircuitBreaker
+    arguments:
+      - '@state'
+
   reqres_users.api_client:
     class: Drupal\reqres_users\Api\ReqresApiClient
     arguments:
@@ -12,3 +17,4 @@ services:
       - '@cache.default'
       - '@state'
       - '@cache_tags.invalidator'
+      - '@reqres_users.circuit_breaker'

@@ -10,7 +10,8 @@ use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Render\RendererInterface;
-use Drupal\reqres_users\Api\ReqresApiClientInterface;
+use Drupal\reqres_users\Contract\UserProviderInterface;
+use Drupal\reqres_users\Exception\ApiException;
 use Drupal\reqres_users\ReqresPagerTrait;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -25,13 +26,13 @@ class ReqresUsersAjaxController extends ControllerBase {
   /**
    * Constructor.
    *
-   * @param \Drupal\reqres_users\Api\ReqresApiClientInterface $apiClient
-   *   The API client for fetching users.
+   * @param \Drupal\reqres_users\Contract\UserProviderInterface $userProvider
+   *   The user provider for fetching users.
    * @param \Drupal\Core\Render\RendererInterface $renderer
    *   The renderer for rendering the AJAX response.
    */
   public function __construct(
-    private readonly ReqresApiClientInterface $apiClient,
+    private readonly UserProviderInterface $userProvider,
     private readonly RendererInterface $renderer,
   ) {}
 
@@ -47,6 +48,12 @@ class ReqresUsersAjaxController extends ControllerBase {
 
   /**
    * Returns an AjaxResponse replacing the block wrapper with a new page.
+   *
+   * @param \Symfony\Component\HttpFoundation\Request $request
+   *   The current request.
+   *
+   * @return \Drupal\Core\Ajax\AjaxResponse
+   *   An AJAX response containing a ReplaceCommand for the block wrapper.
    */
   public function page(Request $request): AjaxResponse {
     $page = max(0, (int) $request->query->get('page', 0));
@@ -60,12 +67,22 @@ class ReqresUsersAjaxController extends ControllerBase {
       Xss::filter((string) $request->query->get('wrapper_id', '')),
     );
 
-    // Reqres API uses 1-based page index.
-    $result = $this->apiClient->getUsers($page + 1, $per_page, $cache_ttl);
+    try {
+      // Reqres API uses 1-based page index.
+      $result = $this->userProvider->getUsers($page + 1, $per_page, $cache_ttl);
+    }
+    catch (ApiException $e) {
+      $html = '<div id="' . Html::escape($wrapper_id) . '">'
+        . $this->t('User data is temporarily unavailable.')
+        . '</div>';
+      $response = new AjaxResponse();
+      $response->addCommand(new ReplaceCommand('#' . $wrapper_id, $html));
+      return $response;
+    }
 
     $rows = array_map(
       static fn($user) => [$user->email, $user->firstName, $user->lastName],
-      $result['users'],
+      $result->getUsers(),
     );
 
     $base_params = [
@@ -85,7 +102,7 @@ class ReqresUsersAjaxController extends ControllerBase {
         '#rows' => $rows,
         '#empty' => $this->t('No users found.'),
       ],
-      '#users_pager' => $this->buildPager($page, $result['total_pages'], $wrapper_id, $base_params),
+      '#users_pager' => $this->buildPager($page, $result->getTotalPages(), $wrapper_id, $base_params),
       '#prefix' => '<div id="' . Html::escape($wrapper_id) . '">',
       '#suffix' => '</div>',
       '#attached' => [
@@ -93,7 +110,7 @@ class ReqresUsersAjaxController extends ControllerBase {
       ],
     ];
 
-    $html = $this->renderer->renderRoot($build);
+    $html = (string) $this->renderer->renderRoot($build);
 
     $response = new AjaxResponse();
     $response->addCommand(new ReplaceCommand('#' . $wrapper_id, $html));

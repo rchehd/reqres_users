@@ -105,7 +105,6 @@ final class ReqresApiClientTest extends TestCase {
       ->willReturn(self::TEST_API_KEY);
 
     $this->circuitBreaker = $this->createMock(CircuitBreaker::class);
-    $this->circuitBreaker->method('isOpen')->willReturn(FALSE);
 
     $this->apiClient = new ReqresApiClient(
       $this->httpClient,

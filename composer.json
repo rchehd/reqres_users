@@ -25,6 +25,12 @@
             "Drupal\\Tests\\reqres_users\\": "tests/"
         }
     },
+    "scripts": {
+        "test": "vendor/bin/phpunit --no-coverage",
+        "cs": "vendor/bin/phpcs",
+        "cbf": "vendor/bin/phpcbf",
+        "stan": "vendor/bin/phpstan analyse"
+    },
     "config": {
         "allow-plugins": {
             "drupal/core-composer-scaffold": false,
